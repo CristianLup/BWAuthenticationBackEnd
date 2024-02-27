@@ -2,24 +2,73 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const radius = require('radius');
 const dgram = require('dgram');
+const mysql = require('mysql');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware to parse JSON bodies
+// Middleware per analizzare i body JSON
 app.use(bodyParser.json());
 
-// RADIUS server configuration
+// Configurazione del server RADIUS
 const radiusServer = {
-    host: '10.200.200.201', // Replace with your RADIUS server IP
-    port: 1812, // RADIUS server port (usually 1812 for authentication)
-    secret: 'Tirocinio123' // Shared secret
+    host: '10.200.200.201', 
+    port: 1812, 
+    secret: 'Tirocinio123' 
 };
 
-// Route to handle user authentication
-app.post('/authenticate', (req, res) => {
+// Configurazione di MySQL
+const mysqlConnection = mysql.createConnection({
+    host: '10.200.200.201',
+    user: 'radius',
+    password: 'radiuspassword',
+    database: 'radius'
+});
+
+mysqlConnection.connect((err) => {
+    if (err) {
+        console.error('Errore durante la connessione a MySQL:', err);
+        throw err;
+    }
+    console.log('Connessione a MySQL avvenuta con successo');
+});
+
+// Route per gestire la registrazione di un nuovo utente
+app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
+    // Verifica se l'utente esiste già nel database MySQL
+    mysqlConnection.query('SELECT * FROM radcheck WHERE username = ?', [username], (err, results) => {
+        if (err) {
+            console.error('Errore durante la verifica dell\'utente:', err);
+            res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
+            return;
+        }
+
+        if (results.length > 0) {
+            res.status(400).json({ error: 'L\'utente esiste già' });
+            return;
+        }
+
+        // Inserimento del nuovo utente nel database MySQL
+        mysqlConnection.query('INSERT INTO radcheck (username, attribute, op, value) VALUES (?, ?, ?, ?)', [username, 'Cleartext-Password', ':=', password], (err, result) => {
+            if (err) {
+                console.error('Errore durante l\'inserimento dell\'utente:', err);
+                res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
+                return;
+            }
+            console.log('Nuovo utente registrato:', { username, password });
+
+            res.json({ success: true });
+        });
+    });
+});
+
+// Route per gestire l'autenticazione degli utenti
+app.post('/authenticate', async (req, res) => {
+    const { username, password } = req.body;
+
+    // Connessione al server RADIUS per l'autenticazione
     const packet = {
         code: 'Access-Request',
         secret: radiusServer.secret,
@@ -34,8 +83,8 @@ app.post('/authenticate', (req, res) => {
     const encodedPacket = radius.encode(packet);
     client.send(encodedPacket, 0, encodedPacket.length, radiusServer.port, radiusServer.host, (err) => {
         if (err) {
-            console.error('Authentication request failed:', err);
-            res.status(500).json({ error: 'Authentication request failed' });
+            console.error('Richiesta di autenticazione fallita:', err);
+            res.status(500).json({ error: 'Richiesta di autenticazione fallita' });
             return;
         }
 
@@ -51,7 +100,7 @@ app.post('/authenticate', (req, res) => {
     });
 });
 
-// Start the Express server
+// Avvio del server Express
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server in esecuzione sulla porta ${PORT}`);
 });
