@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const radius = require('radius');
 const dgram = require('dgram');
 const mysql = require('mysql');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,16 @@ mysqlConnection.connect((err) => {
     console.log('Connessione a MySQL avvenuta con successo');
 });
 
+// Connessione al database MongoDB
+const mongoClient = new MongoClient('mongodb://10.200.200.201:27017', { useNewUrlParser: true, useUnifiedTopology: true });
+mongoClient.connect((err) => {
+    if (err) {
+        console.error('Errore durante la connessione a MongoDB:', err);
+        throw err;
+    }
+    console.log('Connessione a MongoDB avvenuta con successo');
+});
+
 // Route per gestire la registrazione di un nuovo utente
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
@@ -58,6 +69,17 @@ app.post('/register', async (req, res) => {
                 return;
             }
             console.log('Nuovo utente registrato:', { username, password });
+
+            // Salvataggio del log nel database MongoDB
+            const db = mongoClient.db('local');
+            const collection = db.collection('audit');
+            collection.insertOne({ username, action: 'registration', success: true }, (err, result) => {
+                if (err) {
+                    console.error('Errore durante il salvataggio del log di registrazione:', err);
+                    return;
+                }
+                console.log('Log di registrazione salvato con successo:', result.insertedId);
+            });
 
             res.json({ success: true });
         });
@@ -91,6 +113,16 @@ app.post('/authenticate', async (req, res) => {
         client.once('message', (response) => {
             const decodedResponse = radius.decode({ packet: response, secret: radiusServer.secret });
             if (decodedResponse.code === 'Access-Accept') {
+                // Salvataggio del log di autenticazione nel database MongoDB
+                const db = mongoClient.db('local');
+                const collection = db.collection('audit');
+                collection.insertOne({ username, action: 'authentication', success: true }, (err, result) => {
+                    if (err) {
+                        console.error('Errore durante il salvataggio del log di autenticazione:', err);
+                        return;
+                    }
+                    console.log('Log di autenticazione salvato con successo:', result.insertedId);
+                });
                 res.json({ success: true });
             } else {
                 res.status(401).json({ success: false });
