@@ -8,6 +8,10 @@ const { MongoClient } = require('mongodb');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(bodyParser.urlencoded({ extended: true }));
+
+
+
 // Middleware per analizzare i body JSON
 app.use(bodyParser.json());
 
@@ -47,16 +51,32 @@ mongoClient.connect((err) => {
 // Route per gestire la registrazione di un nuovo utente
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
+    const db = mongoClient.db('local');
+    const collection = db.collection('audit');
 
     // Verifica se l'utente esiste già nel database MySQL
     mysqlConnection.query('SELECT * FROM radcheck WHERE username = ?', [username], (err, results) => {
         if (err) {
+            collection.insertOne({ username, action: 'registration', success: "err_sql_verification" }, (err, result) => {
+                if (err) {
+                    console.error('Errore durante il salvataggio del log di registrazione:', err);
+                    return;
+                }
+                console.log('Log di registrazione salvato con successo:', result.insertedId);
+        });
             console.error('Errore durante la verifica dell\'utente:', err);
             res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
             return;
         }
 
         if (results.length > 0) {
+            collection.insertOne({ username, action: 'registration', success: "user_existing" }, (err, result) => {
+                if (err) {
+                    console.error('Errore durante il salvataggio del log di registrazione:', err);
+                    return;
+                }
+                console.log('Log di registrazione salvato con successo:', result.insertedId);
+        });
             res.status(400).json({ error: 'L\'utente esiste già' });
             return;
         }
@@ -64,6 +84,13 @@ app.post('/register', async (req, res) => {
         // Inserimento del nuovo utente nel database MySQL
         mysqlConnection.query('INSERT INTO radcheck (username, attribute, op, value) VALUES (?, ?, ?, ?)', [username, 'Cleartext-Password', ':=', password], (err, result) => {
             if (err) {
+                collection.insertOne({ username, action: 'registration', success: "err_sql_insert" }, (err, result) => {
+                    if (err) {
+                        console.error('Errore durante il salvataggio del log di registrazione:', err);
+                        return;
+                    }
+                    console.log('Log di registrazione salvato con successo:', result.insertedId);
+            });
                 console.error('Errore durante l\'inserimento dell\'utente:', err);
                 res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
                 return;
@@ -71,9 +98,7 @@ app.post('/register', async (req, res) => {
             console.log('Nuovo utente registrato:', { username, password });
 
             // Salvataggio del log nel database MongoDB
-            const db = mongoClient.db('local');
-            const collection = db.collection('audit');
-            collection.insertOne({ username, action: 'registration', success: true }, (err, result) => {
+                collection.insertOne({ username, action: 'registration', success: "sql_success_register" }, (err, result) => {
                 if (err) {
                     console.error('Errore durante il salvataggio del log di registrazione:', err);
                     return;
@@ -88,7 +113,10 @@ app.post('/register', async (req, res) => {
 
 // Route per gestire l'autenticazione degli utenti
 app.post('/authenticate', async (req, res) => {
+    console.log(req.body)
     const { username, password } = req.body;
+
+    console.log(username,password)
 
     // Connessione al server RADIUS per l'autenticazione
     const packet = {
@@ -112,17 +140,19 @@ app.post('/authenticate', async (req, res) => {
 
         client.once('message', (response) => {
             const decodedResponse = radius.decode({ packet: response, secret: radiusServer.secret });
-            if (decodedResponse.code === 'Access-Accept') {
+            
                 // Salvataggio del log di autenticazione nel database MongoDB
                 const db = mongoClient.db('local');
                 const collection = db.collection('audit');
-                collection.insertOne({ username, action: 'authentication', success: true }, (err, result) => {
+                collection.insertOne({ username, action: 'authentication', success: decodedResponse.code }, (err, result) => {
                     if (err) {
                         console.error('Errore durante il salvataggio del log di autenticazione:', err);
                         return;
                     }
                     console.log('Log di autenticazione salvato con successo:', result.insertedId);
                 });
+
+            if (decodedResponse.code === 'Access-Accept') {
                 res.json({ success: true });
             } else {
                 res.status(401).json({ success: false });
