@@ -95,6 +95,7 @@ app.post('/register', async (req, res) => {
                 res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
                 return;
             }
+            
             console.log('Nuovo utente registrato:', { username, password });
 
             // Salvataggio del log nel database MongoDB
@@ -103,11 +104,45 @@ app.post('/register', async (req, res) => {
                     console.error('Errore durante il salvataggio del log di registrazione:', err);
                     return;
                 }
+
+                
+                console.log('Log di registrazione salvato con successo:', result.insertedId);
+            });
+
+        });
+
+        // TESTUSERGROUP
+        mysqlConnection.query('INSERT INTO radusergroup (username,groupname,priority) VALUES (?, ?, ?)', [username, 'usersTirocinio', 0], (err, result) => {
+            if (err) {
+                collection.insertOne({ username, action: 'registration', success: "err_sql_insert" }, (err, result) => {
+                    if (err) {
+                        console.error('Errore durante il salvataggio del log di registrazione:', err);
+                        return;
+                    }
+                    console.log('Log di registrazione salvato con successo:', result.insertedId);
+            });
+                console.error('Errore durante l\'inserimento dell\'utente:', err);
+                res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
+                return;
+            }
+            
+            console.log('Nuovo utente registrato:', { username, password });
+
+            // Salvataggio del log nel database MongoDB
+                collection.insertOne({ username, action: 'registration', success: "sql_success_register" }, (err, result) => {
+                if (err) {
+                    console.error('Errore durante il salvataggio del log di registrazione:', err);
+                    return;
+                }
+
+                
                 console.log('Log di registrazione salvato con successo:', result.insertedId);
             });
 
             res.json({ success: true });
         });
+
+
     });
 });
 
