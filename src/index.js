@@ -3,14 +3,14 @@ const bodyParser = require('body-parser');
 const radius = require('radius');
 const dgram = require('dgram');
 const mysql = require('mysql');
-const { MongoClient } = require('mongodb');
+
+const mongo = require('./controllers/mongoHandle.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const apiUrl = 'http://10.200.200.1:8080/api/v2/'; 
 
 app.use(bodyParser.urlencoded({ extended: true }));
-
-
 
 // Middleware per analizzare i body JSON
 app.use(bodyParser.json());
@@ -36,61 +36,42 @@ mysqlConnection.connect((err) => {
         throw err;
     }
     console.log('Connessione a MySQL avvenuta con successo');
-});
-
-// Connessione al database MongoDB
-const mongoClient = new MongoClient('mongodb://10.200.200.201:27017', { useNewUrlParser: true, useUnifiedTopology: true });
-mongoClient.connect((err) => {
-    if (err) {
-        console.error('Errore durante la connessione a MongoDB:', err);
-        throw err;
-    }
-    console.log('Connessione a MongoDB avvenuta con successo');
-});
+});  
 
 // Route per gestire la registrazione di un nuovo utente
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
-    const db = mongoClient.db('local');
-    const collection = db.collection('audit');
 
     // Verifica se l'utente esiste già nel database MySQL
     mysqlConnection.query('SELECT * FROM radcheck WHERE username = ?', [username], (err, results) => {
         if (err) {
-            collection.insertOne({ username, action: 'registration', success: "err_sql_verification" }, (err, result) => {
-                if (err) {
-                    console.error('Errore durante il salvataggio del log di registrazione:', err);
-                    return;
-                }
-                console.log('Log di registrazione salvato con successo:', result.insertedId);
-        });
+            mongo.insertMongoString(username,'registrazione','failed')
+
             console.error('Errore durante la verifica dell\'utente:', err);
             res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
             return;
         }
 
         if (results.length > 0) {
-            collection.insertOne({ username, action: 'registration', success: "user_existing" }, (err, result) => {
-                if (err) {
-                    console.error('Errore durante il salvataggio del log di registrazione:', err);
-                    return;
-                }
-                console.log('Log di registrazione salvato con successo:', result.insertedId);
-        });
-            res.status(400).json({ error: 'L\'utente esiste già' });
-            return;
+
+            mongo.insertMongoString(username,'registrazione','user_existing')
+            //res.status(400).json({ error: 'L\'utente esiste già' });
+
+            const script = `
+      <script>
+        alert("Utente già esistente!");
+      </script>
+    `;
+    // Invia la risposta al client, includendo lo script JavaScript
+    res.send(script);
+    res.redirect('http://10.200.200.3:3001')
+    return;
         }
 
         // Inserimento del nuovo utente nel database MySQL
         mysqlConnection.query('INSERT INTO radcheck (username, attribute, op, value) VALUES (?, ?, ?, ?)', [username, 'Cleartext-Password', ':=', password], (err, result) => {
             if (err) {
-                collection.insertOne({ username, action: 'registration', success: "err_sql_insert" }, (err, result) => {
-                    if (err) {
-                        console.error('Errore durante il salvataggio del log di registrazione:', err);
-                        return;
-                    }
-                    console.log('Log di registrazione salvato con successo:', result.insertedId);
-            });
+                mongo.insertMongoString(username,'registrazione','err_sql_insert')
                 console.error('Errore durante l\'inserimento dell\'utente:', err);
                 res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
                 return;
@@ -98,46 +79,24 @@ app.post('/register', async (req, res) => {
             
             console.log('Nuovo utente registrato:', { username, password });
 
-            // Salvataggio del log nel database MongoDB
-                collection.insertOne({ username, action: 'registration', success: "sql_success_register" }, (err, result) => {
-                if (err) {
-                    console.error('Errore durante il salvataggio del log di registrazione:', err);
-                    return;
-                }
 
-                
-                console.log('Log di registrazione salvato con successo:', result.insertedId);
-            });
+            mongo.insertMongoString(username,'registrazione','sql_success_register');
+
 
         });
 
         // TESTUSERGROUP
         mysqlConnection.query('INSERT INTO radusergroup (username,groupname,priority) VALUES (?, ?, ?)', [username, 'usersTirocinio', 0], (err, result) => {
             if (err) {
-                collection.insertOne({ username, action: 'registration', success: "err_sql_insert" }, (err, result) => {
-                    if (err) {
-                        console.error('Errore durante il salvataggio del log di registrazione:', err);
-                        return;
-                    }
-                    console.log('Log di registrazione salvato con successo:', result.insertedId);
-            });
+                mongo.insertMongoString(username,'registrazione','err_sql_insert_group');
+
                 console.error('Errore durante l\'inserimento dell\'utente:', err);
                 res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
                 return;
             }
             
-            console.log('Nuovo utente registrato:', { username, password });
-
             // Salvataggio del log nel database MongoDB
-                collection.insertOne({ username, action: 'registration', success: "sql_success_register" }, (err, result) => {
-                if (err) {
-                    console.error('Errore durante il salvataggio del log di registrazione:', err);
-                    return;
-                }
-
-                
-                console.log('Log di registrazione salvato con successo:', result.insertedId);
-            });
+            mongo.insertMongoString(username,'registrazione','sql_success_register_group');
 
             res.json({ success: true });
         });
@@ -145,6 +104,8 @@ app.post('/register', async (req, res) => {
 
     });
 });
+
+
 
 // Route per gestire l'autenticazione degli utenti
 app.post('/authenticate', async (req, res) => {
@@ -176,19 +137,17 @@ app.post('/authenticate', async (req, res) => {
         client.once('message', (response) => {
             const decodedResponse = radius.decode({ packet: response, secret: radiusServer.secret });
             
-                // Salvataggio del log di autenticazione nel database MongoDB
-                const db = mongoClient.db('local');
-                const collection = db.collection('audit');
-                collection.insertOne({ username, action: 'authentication', success: decodedResponse.code }, (err, result) => {
-                    if (err) {
-                        console.error('Errore durante il salvataggio del log di autenticazione:', err);
-                        return;
-                    }
-                    console.log('Log di autenticazione salvato con successo:', result.insertedId);
-                });
+            mongo.insertMongoString(username,'autenticazione',decodedResponse.code );
+
+               
 
             if (decodedResponse.code === 'Access-Accept') {
-                res.json({ success: true });
+
+//TEST
+            
+//TEST
+
+                res.redirect('http://10.200.200.3:3001/success')
             } else {
                 res.status(401).json({ success: false });
             }
