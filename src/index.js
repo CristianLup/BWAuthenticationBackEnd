@@ -3,12 +3,12 @@ const bodyParser = require('body-parser');
 const radius = require('radius');
 const dgram = require('dgram');
 const mysql = require('mysql');
-
+const fetch = require('node-fetch');
 const mongo = require('./controllers/mongoHandle.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const apiUrl = 'http://10.200.200.1:8080/api/v2/'; 
+
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -109,10 +109,18 @@ app.post('/register', async (req, res) => {
 
 // Route per gestire l'autenticazione degli utenti
 app.post('/authenticate', async (req, res) => {
-    console.log(req.body)
-    const { username, password } = req.body;
 
-    console.log(username,password)
+//TEST URL
+
+//TEST URL
+
+
+
+
+    console.log(req.body)
+    const { username, password, magic, post } = req.body;
+
+    console.log(username,password,magic,post)
 
     // Connessione al server RADIUS per l'autenticazione
     const packet = {
@@ -134,7 +142,7 @@ app.post('/authenticate', async (req, res) => {
             return;
         }
 
-        client.once('message', (response) => {
+        client.once('message', async (response) => {
             const decodedResponse = radius.decode({ packet: response, secret: radiusServer.secret });
             
             mongo.insertMongoString(username,'autenticazione',decodedResponse.code );
@@ -144,10 +152,40 @@ app.post('/authenticate', async (req, res) => {
             if (decodedResponse.code === 'Access-Accept') {
 
 //TEST
-            
+const formData = new URLSearchParams();
+    formData.append('magic', magic);
+    formData.append('username', username);
+    formData.append('password', password);
+
+  try {
+    // Invio della richiesta POST all'URL di destinazione
+    const response = await fetch('http://10.233.233.1:1000/fgtauth', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      
+    });
+    console.log('POROCCCIO'+response)
+    const data = await response.json();
+    console.log(data);
+//        res.send('Login avvenuto con successo');
+
+    //      if (response.ok) {
+//        res.send('Login avvenuto con successo');
+//      } else {
+//        res.status(response.status).send('Errore durante il login');
+//      }
+    } catch (error) {
+      console.error('Errore durante la richiesta al server:', error);
+      res.status(500).send('Errore interno del server');
+    }
+
+
 //TEST
 
-                res.redirect('http://10.200.200.3:3001/success')
+           //     res.redirect('http://10.200.200.3:3001/success')
             } else {
                 res.status(401).json({ success: false });
             }
