@@ -6,6 +6,7 @@ const mysql = require('mysql');
 const fetch = require('node-fetch');
 const mongo = require('./controllers/mongoHandle.js');
 const https = require('https');
+const crypto = require('crypto');
 
 
 const agent = new https.Agent({
@@ -44,6 +45,12 @@ mysqlConnection.connect((err) => {
     console.log('Connessione a MySQL avvenuta con successo');
 });  
 
+
+function md5Hash(password) {
+    return crypto.createHash('md5').update(password).digest('hex');
+  }
+
+
 // Route per gestire la registrazione di un nuovo utente
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
@@ -71,8 +78,9 @@ app.post('/register', async (req, res) => {
     return;
         }
 
+        const cryptedPassword = md5Hash(password);
         // Inserimento del nuovo utente nel database MySQL
-        mysqlConnection.query('INSERT INTO radcheck (username, attribute, op, value) VALUES (?, ?, ?, ?)', [username, 'Cleartext-Password', ':=', password], (err, result) => {
+        mysqlConnection.query('INSERT INTO radcheck (username, attribute, op, value) VALUES (?, ?, ?, ?)', [username, 'MD5-Password', ':=', cryptedPassword], (err, result) => {
             if (err) {
                 mongo.insertMongoString(username,'registrazione','err_sql_insert')
                 console.error('Errore durante l\'inserimento dell\'utente:', err);
@@ -157,6 +165,11 @@ app.post('/authenticate', async (req, res) => {
 
     console.log(username,password,magic,post)
 
+    function md5Hash(password) {
+        return crypto.createHash('md5').update(password).digest('hex');
+      }
+      const cryptedPassword = md5Hash(password);
+
     // Connessione al server RADIUS per l'autenticazione
     const packet = {
         code: 'Access-Request',
@@ -166,7 +179,7 @@ app.post('/authenticate', async (req, res) => {
             ['User-Password', password]
         ]
     };
-
+console.log(packet)
     const client = dgram.createSocket('udp4');
 
     const encodedPacket = radius.encode(packet);
