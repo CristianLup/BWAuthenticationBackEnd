@@ -3,7 +3,7 @@ const { MongoClient } = require('mongodb');
 const mongoClient = new MongoClient('mongodb://10.200.200.201:27017', { useNewUrlParser: true, useUnifiedTopology: true });
 const db = mongoClient.db('local');
 const collection = db.collection('audit');
-
+const date = new Date();
 mongoClient.connect((err) => {
     if (err) {
         console.error('Errore durante la connessione a MongoDB:', err);
@@ -14,7 +14,7 @@ mongoClient.connect((err) => {
 
 
 exports.insertMongoString = function(username, action, outcome){
-    collection.insertOne({ username, action: action, outcome: outcome }, (err, result) => {
+    collection.insertOne({ username, action: action, outcome: outcome, date: date.toLocaleDateString() }, (err, result) => {
         if (err) {
             console.error('Errore durante il salvataggio del log di ${action}', err);
             return;

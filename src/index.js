@@ -63,14 +63,11 @@ app.post('/register', async (req, res) => {
             mongo.insertMongoString(username,'registrazione','user_existing')
             //res.status(400).json({ error: 'L\'utente esiste già' });
 
-            const script = `
-      <script>
-        alert("Utente già esistente!");
-      </script>
-    `;
+            
     // Invia la risposta al client, includendo lo script JavaScript
-    res.send(script);
-    res.redirect('http://10.200.200.5:3001')
+    const testo="existing"
+    res.redirect(`http://10.200.200.5:3001/registration/${testo}`);
+    console.log(testo)
     return;
         }
 
@@ -104,12 +101,44 @@ app.post('/register', async (req, res) => {
             // Salvataggio del log nel database MongoDB
             mongo.insertMongoString(username,'registrazione','sql_success_register_group');
 
-            res.json({ success: true });
+            //res.redirect('http://10.200.200.5:3001')
+            res.redirect('http://10.200.200.5:3001/successRegistration')
+
+        
+        
         });
 
 
     });
 });
+
+app.post('/checkUserExists', async (req, res) => {
+    const username= req.body;
+
+    // Verifica se l'utente esiste già nel database MySQL
+    mysqlConnection.query('SELECT * FROM radcheck WHERE username = ?', [username], (err, results) => {
+        if (err) {
+            mongo.insertMongoString(username,'registrazione','failed')
+
+            console.error('Errore durante la verifica dell\'utente:', err);
+            res.status(500).json({ error: 'Errore durante la registrazione dell\'utente' });
+            return;
+        }
+
+        if (results.length > 0) {
+
+            //mongo.insertMongoString(username,'registrazione','user_existing')
+            res.status(400).json({ exists:true });
+
+    return;
+        }
+            //res.redirect('http://10.200.200.5:3001')        
+            res.status(500).json({ exists:false });
+
+        });
+
+
+    });
 
 
 
@@ -166,7 +195,7 @@ const formData = new URLSearchParams();
 
   try {
     // Invio della richiesta POST all'URL di destinazione
-    const response = await fetch('http://10.233.233.1:1000/fgtauth', {
+    const response = await fetch('https://10.233.233.1:1000/fgtauth', {
     agent : agent, 
     method: 'POST',
       body: formData,
@@ -198,8 +227,8 @@ const formData = new URLSearchParams();
 
                 res.redirect('http://10.200.200.5:3001/success')
             } else {
-                res.status(401).json({ success: false });
-            }
+                const testo="badcredentials"
+                res.redirect(`http://10.200.200.5:3001/login/${testo}`);            }
             client.close();
         });
     });
