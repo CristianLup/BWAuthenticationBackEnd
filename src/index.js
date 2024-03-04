@@ -5,6 +5,12 @@ const dgram = require('dgram');
 const mysql = require('mysql');
 const fetch = require('node-fetch');
 const mongo = require('./controllers/mongoHandle.js');
+const https = require('https');
+
+
+const agent = new https.Agent({
+    rejectUnauthorized: false
+  });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -64,7 +70,7 @@ app.post('/register', async (req, res) => {
     `;
     // Invia la risposta al client, includendo lo script JavaScript
     res.send(script);
-    res.redirect('http://10.200.200.3:3001')
+    res.redirect('http://10.200.200.5:3001')
     return;
         }
 
@@ -152,6 +158,7 @@ app.post('/authenticate', async (req, res) => {
             if (decodedResponse.code === 'Access-Accept') {
 
 //TEST
+/*
 const formData = new URLSearchParams();
     formData.append('magic', magic);
     formData.append('username', username);
@@ -160,7 +167,8 @@ const formData = new URLSearchParams();
   try {
     // Invio della richiesta POST all'URL di destinazione
     const response = await fetch('http://10.233.233.1:1000/fgtauth', {
-      method: 'POST',
+    agent : agent, 
+    method: 'POST',
       body: formData,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -170,7 +178,10 @@ const formData = new URLSearchParams();
     console.log('POROCCCIO'+response)
     const data = await response.json();
     console.log(data);
-//        res.send('Login avvenuto con successo');
+
+/////TEST
+
+    //        res.send('Login avvenuto con successo');
 
     //      if (response.ok) {
 //        res.send('Login avvenuto con successo');
@@ -182,10 +193,10 @@ const formData = new URLSearchParams();
       res.status(500).send('Errore interno del server');
     }
 
-
+*/
 //TEST
 
-           //     res.redirect('http://10.200.200.3:3001/success')
+                res.redirect('http://10.200.200.5:3001/success')
             } else {
                 res.status(401).json({ success: false });
             }
